@@ -8,7 +8,7 @@ print 'camera connected'
 # Define the codec and create VideoWriter object
 fourcc = cv2.VideoWriter_fourcc(*'i420')
 xsize, ysize = cap.get(3), cap.get(4)
-out = cv2.VideoWriter('output3.avi',fourcc, 60.0, (int(xsize),int(ysize)))
+out = cv2.VideoWriter('output5.avi',fourcc, 60.0, (int(xsize),int(ysize)))
 
 print(xsize,ysize)
 

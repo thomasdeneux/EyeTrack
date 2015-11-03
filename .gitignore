@@ -2,3 +2,6 @@ mouse.gif
 *.avi
 .idea/
 opencv.lnk
+*.mat
+*.pyc
+test.py
