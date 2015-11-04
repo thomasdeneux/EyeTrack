@@ -1,11 +1,45 @@
 import cv2
 import numpy as np
+import pyaudio
+import datetime
 from scipy.io import savemat
 from scipy.misc import imresize
 from time import clock, sleep
 from math import floor
 
 import tracking
+
+def trigger_on(CHUNK=100,RATE=44100,THRESH=10000):
+    # set parameters
+    FORMAT = pyaudio.paInt16
+    CHANNELS = 1
+    result = False
+    # Initialization
+    p = pyaudio.PyAudio()
+    stream = p.open(format=FORMAT,
+                    channels=CHANNELS,
+                    rate=RATE,
+                    input=True,
+                    frames_per_buffer=CHUNK)
+
+    # Read the Mic adn convert to numpy array
+    data = stream.read(CHUNK)
+    data = np.fromstring(data, dtype = np.int16)
+    # Test if there is a value above threshold
+    if np.sum(data > THRESH)>0:
+        result = True
+
+    # close stream
+    stream.stop_stream()
+    stream.close()
+    p.terminate()
+    return result
+
+
+def wait_for_threshold(CHUNK=100,RATE=44100,THRESH=10000):
+    while not trigger_on(CHUNK,RATE,THRESH):
+        continue
+    return datetime.datetime.now()
 
 # PARAMETERS
 dorec = False
