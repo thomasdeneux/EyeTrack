@@ -1,16 +1,10 @@
 # Sub-functions involved in realtime pupil tracking
 
 import cv2
-import numpy as np
 import pylab as plt
-import matplotlib.cm as cm
-import scipy.ndimage.filters as filt
-import pyqtgraph as pg
+from time import clock
 
-import scipy.stats as st
-from scipy.ndimage.interpolation import shift
 import numpy as np
-from scipy.misc import imresize
 from scipy.optimize import fmin, minimize, fmin_cg
 
 
@@ -42,7 +36,7 @@ def select_roi(frame):
     cv2.imshow('roi', frame)
 
     while True:
-        # if cv2.waitKey(20) & 0xFF == 27:
+        cv2.waitKey(20)  # this line allows other event to process
         if state[0] == "done":
             cv2.destroyWindow("roi")
             break
@@ -98,6 +92,13 @@ class Tracker:
 
         # Tracking results
         self.fit = (self.nx/2, self.ny/2, 7)
+        self.dosave = False
+        self.xshift = []
+        self.yshift = []
+        self.rshift = []
+
+    def startsave(self):
+        self.dosave = True
         self.xshift = []
         self.yshift = []
         self.rshift = []
@@ -111,11 +112,11 @@ class Tracker:
         xv, yv = np.meshgrid(linx, liny)
         xv = np.array(xv, np.uint8)
         img = eye + xv
+        img = cv2.GaussianBlur(img,(5,5),0)
 
         # clip image, smooth and center on threshold
-        img = cv2.GaussianBlur(img,(5,5),0)
-        img = np.clip(img, self.mini, self.maxi)
-        eye2 = img.astype(float) - self.threshold
+        eye2 = np.clip(img, self.mini, self.maxi)
+        eye2 = eye2.astype(float) - self.threshold
 
         # edge detection
         ix = cv2.Scharr(img,cv2.CV_32F,1,0)
@@ -182,19 +183,22 @@ class Tracker:
 
         eye2, eyecontour = self.preprocess(eye)
 
+        # opt = dict(xtol=0.0001, ftol=0.0001, maxiter=None, maxfun=None, disp=False)
+        opt = dict(xtol=0.1, ftol=0.1, maxiter=10, maxfun=None, disp=True)
         if self.dotrack:
-            self.fit = fmin(self.energycalc, self.fit, (eye2, eyecontour), disp=False)
+            self.fit = fmin(self.energycalc, self.fit, (eye2, eyecontour), **opt)
         else:
-            self.fit = fmin(self.energycalc, (self.nx/2, self.ny/2, 10), (eye2, eyecontour), disp=False)
+            self.fit = fmin(self.energycalc, (self.nx/2, self.ny/2, 10), (eye2, eyecontour), **opt)
 
         self.fit = np.maximum(self.fit, 0)
         self.fit = np.minimum(self.fit, np.max([self.nx, self.ny]))
 
         self.energycalc(self.fit, eye2, eyecontour, showimage=True)
 
-        self.xshift.append(self.fit[1])
-        self.yshift.append(self.fit[0])
-        self.rshift.append(self.fit[2])
+        if self.dosave:
+            self.xshift.append(self.fit[1])
+            self.yshift.append(self.fit[0])
+            self.rshift.append(self.fit[2])
 
     def summary(self):
         plt.plot(self.xshift)
