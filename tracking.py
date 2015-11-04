@@ -20,16 +20,16 @@ from scipy.optimize import fmin, minimize, fmin_cg
 
 def select_roi(frame):
     roi = {'x1': 0, 'x2': 0, 'y1': 0, 'y2': 0}
-    drawing = [False]
+    state = ["point1"]
 
     def draw_rect(event,x,y,flags,param):
         if event == cv2.EVENT_LBUTTONDOWN:
-            drawing[0] = True
             roi['x1'], roi['y1'] = x, y
+            state[0] = "point2"
         elif event == cv2.EVENT_LBUTTONUP:
-            drawing[0] = False
+            state[0] = "done"
 
-        if not(drawing[0]):
+        if state[0] != "point2":
             return
 
         roi['x2'], roi['y2'] = x, y
@@ -42,8 +42,9 @@ def select_roi(frame):
     cv2.imshow('roi', frame)
 
     while True:
-        if cv2.waitKey(20) & 0xFF == 27:
-            cv2.destroyAllWindows()
+        # if cv2.waitKey(20) & 0xFF == 27:
+        if state[0] == "done":
+            cv2.destroyWindow("roi")
             break
 
     roi['x1'], roi['x2'] = sorted((roi['x1'], roi['x2']))

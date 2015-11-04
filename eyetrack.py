@@ -9,8 +9,8 @@ import tracking
 
 # PARAMETERS
 dorec = False
-dosave = True
-dotrack = True
+dosave = False
+dotrack = False
 outname = "data"
 
 # INPUT MOVIE
