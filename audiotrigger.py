@@ -2,11 +2,14 @@ import pyaudio
 import numpy as np
 import time
 
+import cv2
+
 class AudioTrigger:
-    def __init__(self, RATE=44100, BUFFER=1000):
+    def __init__(self, RATE=44100, CHUNK=600): # by default, CHUNKS represent ~15ms of recording
         # set parameters
         self.RATE = RATE
-        self.BUFFER = BUFFER
+        self.CHUNK = CHUNK
+        #cv2.namedWindow('audio', cv2.WINDOW_NORMAL)
 
     def load(self):
         self.stupid = 0
@@ -19,49 +22,34 @@ class AudioTrigger:
                                   channels=CHANNELS,
                                   rate=self.RATE,
                                   input=True,
-                                  frames_per_buffer=self.BUFFER)  # buffer 200ms
-
-    def __del__(self):
-        self.free()
+                                  frames_per_buffer=self.CHUNK)
 
     def free(self):
         self.stream.stop_stream()
         self.stream.close()
         self.p.terminate()
 
-    def check(self, THRESH=10000):
+    def check(self, THRESH=32000):
         # Read the Mic adn convert to numpy array
-        data = self.stream.read(self.stream.get_read_available())
-        data = np.fromstring(data, dtype=np.int16)
+        while self.stream.get_read_available() > 0:
+            data = self.stream.read(self.CHUNK)
+            data = np.fromstring(data, dtype=np.int16)
 
-        # Test if there is a value above threshold
-        #print data.mean()
-        result = np.sum(data > THRESH) > 0
+            # Test if there is a value above threshold
+            # print data.shape, data.std()
+            result = np.sum(data > THRESH) > self.CHUNK/2
 
-        # emulate a check
-        self.stupid += 100
-        result = (self.stupid >= THRESH)
+            # emulate a check
+            #self.stupid += 100
 
-        # free stream if trigger was detected
-        if result:
-            self.free()
-        return result
+            # free stream if trigger was
+            if result:
+                self.free()
+            return result
 
+        return False
 
 if __name__ == "__main__":
     A = AudioTrigger()
     A.load()
-    time.sleep(.01)
-    print A.check()
-    time.sleep(.1)
-    print A.check()
-    time.sleep(.2)
-    print A.check()
-    time.sleep(.5)
-    print A.check()
-    time.sleep(1)
-    print A.check()
-    time.sleep(2)
-    print A.check()
-    time.sleep(5)
-    print A.check()
+    while not A.check(): time.sleep(.01)

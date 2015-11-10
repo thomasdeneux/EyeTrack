@@ -12,7 +12,7 @@ import tracking, audiotrigger
 
 
 class EyetrackMenu(QDialog):
-    DOREC = False
+    DOREC = True
 
     def __init__(self):
         QDialog.__init__(self, None)
@@ -53,17 +53,21 @@ class EyetrackMenu(QDialog):
         # (eye tracking)
         self.tracker = []
 
+        # (graphics)
+        self.buttons, self.statusbar = [], []
+
         # Init graphics
         self.init_graphics()
 
         # Init camera and grab continuously
         self.init_camera()
 
-    def __del__(self):
-        print 'cleaning up'
+    def free(self):
+        print 'cleaning up...'
+        self.film.release()
         cv2.destroyAllWindows()
         self.acq_timer.stop()
-        self.film.release()
+        print 'done'
 
     # GRAPHICS
     def init_graphics(self):
@@ -76,7 +80,7 @@ class EyetrackMenu(QDialog):
         # ROI and pupil tracking
         row += 1
         b = QPushButton("Select ROI")
-        b.clicked.connect(self.select_roi)
+        b.clicked.connect(lambda: self.select_roi())
         self.layout.addWidget(b, row, 1)
 
         b = QPushButton("TRACK")
@@ -88,7 +92,7 @@ class EyetrackMenu(QDialog):
         # File name
         row += 1
         b = QPushButton("file name:")
-        b.clicked.connect(self.select_filename)
+        b.clicked.connect(lambda: self.select_filename())
         self.layout.addWidget(b, row, 1)
 
         b = QLineEdit("")
@@ -182,21 +186,22 @@ class EyetrackMenu(QDialog):
         else:
             self.film = cv2.VideoCapture("mouseeyetracking.avi")
             # spare time for setting ROI and file name
-            self.roi = {'x1': 222, 'y1': 163, 'x2': 268, 'y2': 210}
-            self.roisave = {'x1': 212, 'y1': 153, 'x2': 278, 'y2': 220}
-            self.nxsave, self.nysave = self.roisave['x2'] - self.roisave['x1'], self.roisave['y2'] - self.roisave['y1']
-            self.roi_selected = True
+            self.select_roi({'x1': 222, 'y1': 163, 'x2': 268, 'y2': 210})
             self.select_filename("C:/Users/THomas/PycharmProjects/EyeTrack/data")
 
         # grab one frame
         ret, self.frame = self.film.read()
         while self.frame is None:
-            ret, self.frame = film.read()
+            ret, self.frame = self.film.read()
         print ret
         print self.film.isOpened()
         print self.frame.shape
         if self.frame.ndim == 3:
             self.frame = cv2.cvtColor(self.frame, cv2.COLOR_BGR2GRAY)
+
+        # show it
+        cv2.namedWindow('movie', cv2.WINDOW_NORMAL)
+        cv2.imshow('movie', self.frame)
 
         # Main loop: grab and process frames continuously
         self.t0 = clock()
@@ -205,8 +210,10 @@ class EyetrackMenu(QDialog):
         self.acq_timer.start()
 
     # SELECT ROI
-    def select_roi(self):
-        self.roi = tracking.select_roi(self.frame)
+    def select_roi(self, roi=None):
+        if roi is None:
+            roi = tracking.select_roi(self.frame)
+        self.roi = roi
 
         # ROI for saving must be at least 65x65 otherwise buffer might be to small
         roisave = self.roi.copy()
@@ -226,12 +233,13 @@ class EyetrackMenu(QDialog):
 
         # Re-init tracker if necessary
         if self.dotrack:
+            self.eye = tracking.resize_roi(self.frame, self.roi)
             self.tracker = tracking.Tracker(self.eye)
 
     # MAIN LOOP
     def process_one_frame(self):
 
-        ret, frame3 = self.film.read()
+        ret, self.frame = self.film.read()
 
         # no frame -> indicate that there is some "idle" time
         if not ret:
@@ -244,7 +252,7 @@ class EyetrackMenu(QDialog):
             else:
                 self.film.release()
                 self.film = cv2.VideoCapture("mouseeyetracking.avi")
-                ret, frame3 = self.film.read()
+                ret, self.frame = self.film.read()
         else:
             self.idle = False
 
@@ -257,10 +265,8 @@ class EyetrackMenu(QDialog):
             self.nprocessed = 0
 
         # make frame single channel
-        if frame3.ndim == 3:
-            self.frame = cv2.cvtColor(frame3, cv2.COLOR_BGR2GRAY)
-        else:
-            self.frame = frame3
+        if self.frame.ndim == 3:
+            self.frame = cv2.cvtColor(self.frame, cv2.COLOR_BGR2GRAY)
 
         # display frame
         cv2.imshow('movie', self.frame)
@@ -278,7 +284,7 @@ class EyetrackMenu(QDialog):
             # open movie for writing
             fourcc = cv2.VideoWriter_fourcc(*'i420')
             self.curname = self.filename + '_%.3i' % self.curacq
-            self.out = cv2.VideoWriter(self.curname + '.avi', fourcc, 60.0, (self.nysave, self.nxsave))
+            self.out = cv2.VideoWriter(self.curname + '.avi', fourcc, 60.0, (self.nxsave, self.nysave))
 
             # prepare for saving time vector and tracking results
             self.timevector = []
@@ -314,8 +320,10 @@ class EyetrackMenu(QDialog):
 
         # save
         if self.acqstate == 'on':
-            eyesave = tracking.resize_roi(frame3, self.roisave)
+            eyesave = tracking.resize_roi(self.frame, self.roisave)
+            eyesave = eyesave.reshape((self.nysave, self.nxsave, 1)).repeat(3, axis=2)
             self.timevector.append(clock() - self.acqstart)
+            #print 'write', eyesave.dtype, eyesave.shape
             self.out.write(eyesave)
 
         # track
@@ -342,6 +350,7 @@ def launch_menu():
     b = EyetrackMenu()
     b.show()
     app.exec_()
+    b.free()
 
 
 if __name__ == "__main__":

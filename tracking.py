@@ -66,17 +66,19 @@ class Tracker:
         self.mini = 0
         self.threshold = 50
         self.maxi = 70
-        self.xdrift, self.xdriftmax = 30., 100.
+        self.xdrift, self.xdriftmax = 0., 100.
         self.maxcontour = 300
         self.alpha = .5
         self.dotrack = True
+        self.fmintol = .01
+        self.maxiter = 10
 
         # Init graphics
         def nothing(x):
             pass
         # (create windows)
-        cv2.namedWindow('preproc')  #, cv2.WINDOW_NORMAL | cv2.WINDOW_KEEPRATIO)
-        cv2.namedWindow('controls') #, cv2.WINDOW_NORMAL | cv2.WINDOW_KEEPRATIO)
+        cv2.namedWindow('preproc')
+        cv2.namedWindow('controls', cv2.WINDOW_NORMAL)
         # (create trackbars)
         cv2.createTrackbar('mini', 'controls', self.mini, 100, nothing)
         cv2.createTrackbar('threshold', 'controls', self.threshold, 100, nothing)
@@ -85,6 +87,8 @@ class Tracker:
         cv2.createTrackbar('maxcontour', 'controls', self.maxcontour, 800, nothing)
         cv2.createTrackbar('alpha', 'controls', int(self.alpha*100), 100, nothing)
         cv2.createTrackbar('dotrack', 'controls', self.dotrack, 1, nothing)
+        cv2.createTrackbar('fmintol', 'controls', int(-10*np.log10(self.fmintol)), 50, nothing)
+        cv2.createTrackbar('maxiter', 'controls', self.maxiter, 100, nothing)
 
         # TODO: drift dependant of the size of the image
         # TODO: optimization parameters
@@ -180,11 +184,13 @@ class Tracker:
         self.maxcontour = cv2.getTrackbarPos('maxcontour', 'controls')
         self.alpha = cv2.getTrackbarPos('alpha', 'controls')/100.
         self.dotrack = cv2.getTrackbarPos('dotrack', 'controls')
+        self.fmintol = 10**(-cv2.getTrackbarPos('fmintol', 'controls')/10)
+        self.maxiter = cv2.getTrackbarPos('maxiter', 'controls')
 
         eye2, eyecontour = self.preprocess(eye)
 
         # opt = dict(xtol=0.0001, ftol=0.0001, maxiter=None, maxfun=None, disp=False)
-        opt = dict(xtol=0.1, ftol=0.1, maxiter=10, maxfun=None, disp=True)
+        opt = dict(xtol=self.fmintol, ftol=self.fmintol, maxiter=self.maxiter, maxfun=None, disp=False)
         if self.dotrack:
             self.fit = fmin(self.energycalc, self.fit, (eye2, eyecontour), **opt)
         else:
