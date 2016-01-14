@@ -16,7 +16,7 @@ def select_roi(frame):
     roi = {'x1': 0, 'x2': 0, 'y1': 0, 'y2': 0}
     state = ["point1"]
 
-    def draw_rect(event,x,y,flags,param):
+    def draw_rect(event, x, y, flags, param):
         if event == cv2.EVENT_LBUTTONDOWN:
             roi['x1'], roi['y1'] = x, y
             state[0] = "point2"
@@ -80,9 +80,9 @@ class Tracker:
         cv2.namedWindow('preproc')
         cv2.namedWindow('controls', cv2.WINDOW_NORMAL)
         # (create trackbars)
-        cv2.createTrackbar('mini', 'controls', self.mini, 100, nothing)
-        cv2.createTrackbar('threshold', 'controls', self.threshold, 100, nothing)
-        cv2.createTrackbar('maxi', 'controls', self.maxi, 100, nothing)
+        cv2.createTrackbar('mini', 'controls', self.mini, 255, nothing)
+        cv2.createTrackbar('threshold', 'controls', self.threshold, 255, nothing)
+        cv2.createTrackbar('maxi', 'controls', self.maxi, 255, nothing)
         cv2.createTrackbar('xdrift', 'controls', int((self.xdrift/self.xdriftmax + 1)*50), 100, nothing)
         cv2.createTrackbar('maxcontour', 'controls', self.maxcontour, 800, nothing)
         cv2.createTrackbar('alpha', 'controls', int(self.alpha*100), 100, nothing)
@@ -119,8 +119,12 @@ class Tracker:
         img = cv2.GaussianBlur(img,(5,5),0)
 
         # clip image, smooth and center on threshold
-        eye2 = np.clip(img, self.mini, self.maxi)
-        eye2 = eye2.astype(float) - self.threshold
+        if self.mini <= self.maxi:
+            eye2 = np.clip(img, self.mini, self.maxi)
+            eye2 = eye2.astype(float) - self.threshold
+        else:
+            eye2 = np.clip(img, self.maxi, self.mini)
+            eye2 = self.threshold - eye2.astype(float)
 
         # edge detection
         ix = cv2.Scharr(img,cv2.CV_32F,1,0)
@@ -178,8 +182,14 @@ class Tracker:
 
     def track(self, eye):
         self.threshold = cv2.getTrackbarPos('threshold', 'controls')
-        self.mini = min(cv2.getTrackbarPos('mini', 'controls'),self.threshold-1)
-        self.maxi = max(cv2.getTrackbarPos('maxi', 'controls'),self.threshold+1)
+        self.mini = cv2.getTrackbarPos('mini', 'controls')
+        self.maxi = cv2.getTrackbarPos('maxi', 'controls')
+        if self.mini <= self.maxi:
+            self.mini = min(self.mini, self.threshold-1)
+            self.maxi = max(self.maxi, self.threshold+1)
+        else:
+            self.mini = max(self.mini, self.threshold+1)
+            self.maxi = min(self.maxi, self.threshold-1)
         self.xdrift = (cv2.getTrackbarPos('xdrift', 'controls')/50.-1)*self.xdriftmax
         self.maxcontour = cv2.getTrackbarPos('maxcontour', 'controls')
         self.alpha = cv2.getTrackbarPos('alpha', 'controls')/100.

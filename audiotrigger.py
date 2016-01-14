@@ -41,6 +41,7 @@ class AudioTrigger:
 
             # emulate a check
             #self.stupid += 100
+            #print result.mean()
 
             # free stream if trigger was
             if result:
