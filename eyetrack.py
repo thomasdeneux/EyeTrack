@@ -6,7 +6,7 @@ from scipy.io import savemat
 
 import os.path
 from time import clock, sleep
-from math import floor
+from math import floor, ceil
 
 import tracking, audiotrigger
 
@@ -27,9 +27,11 @@ class EyetrackMenu(QDialog):
         # (camera grabbing)
         self.film, self.frame = [], []
         self.status = ''
-        self.t0, self.nprocessed, self.fps = 0, 0, 0
+        self.t0, self.tlast, self.maxgap, self.nprocessed = 0, 0, 0, 0
+        self.grabdesc = ''
         self.idle = False
         self.acq_timer = []
+        self.maxfreq = 0
 
         # (acquisition)
         self.filename = ''
@@ -120,6 +122,16 @@ class EyetrackMenu(QDialog):
         self.layout.addWidget(b, row, 2)
         self.buttons['numacq'] = b
 
+        # Max frequency
+        row += 1
+        b = QLabel("max frequency (0=Inf.)")
+        self.layout.addWidget(b, row, 1)
+
+        b = QLineEdit(str(self.maxfreq))
+        b.textChanged.connect(lambda: self.readinput('maxfreq'))
+        self.layout.addWidget(b, row, 2)
+        self.buttons['maxfreq'] = b
+
         # Start
         row += 1
         b = QPushButton("RUN")
@@ -141,6 +153,12 @@ class EyetrackMenu(QDialog):
             self.numacq = num
         elif field == 'acqlen':
             self.acqlen = num
+        elif field == 'maxfreq':
+            self.maxfreq = num
+            #if self.maxfreq:
+            #    self.acq_timer.setInterval(1000/self.maxfreq)
+            #else:
+            #    self.acq_timer.setInterval(0)
 
     def startstop(self):
         b = self.buttons['startstop']
@@ -204,8 +222,12 @@ class EyetrackMenu(QDialog):
         cv2.imshow('movie', self.frame)
 
         # Main loop: grab and process frames continuously
-        self.t0 = clock()
+        self.t0, self.tlast = clock(), clock()
         self.acq_timer = QTimer()
+        #if self.maxfreq:
+        #    self.acq_timer.setInterval(1000/self.maxfreq)
+        #else:
+        #    self.acq_timer.setInterval(0)
         self.acq_timer.timeout.connect(self.process_one_frame)
         self.acq_timer.start()
 
@@ -239,6 +261,18 @@ class EyetrackMenu(QDialog):
     # MAIN LOOP
     def process_one_frame(self):
 
+        # grab frame (locked to clock if maxfreq is defined)
+        t = clock()
+        if self.maxfreq:
+            tick = t*self.maxfreq
+            ticklast = floor(self.tlast*self.maxfreq+0.0001) # add a small quantity to avoid numerical error resulting in a value 1 less than it should
+            if tick-ticklast<1:
+                # we did not miss a tick, wait for next tick
+                ticknext = ceil(tick)
+                sleep((ticknext-tick)/self.maxfreq)
+                t = ticknext/self.maxfreq
+        self.maxgap = max(self.maxgap,t-self.tlast)
+        self.tlast = t
         ret, self.frame = self.film.read()
 
         # no frame -> indicate that there is some "idle" time
@@ -260,9 +294,11 @@ class EyetrackMenu(QDialog):
         t = clock()
         self.nprocessed += 1
         if t > self.t0 + 1:
-            self.fps = self.nprocessed / (t - self.t0)
+            fps = self.nprocessed / (t - self.t0)
+            self.grabdesc = " (%.1ffps, max %.0fms gap)" % (fps,self.maxgap*1000)
             self.t0 = t
             self.nprocessed = 0
+            self.maxgap = 0
 
         # make frame single channel
         if self.frame.ndim == 3:
@@ -341,8 +377,7 @@ class EyetrackMenu(QDialog):
             cv2.imshow('eye', img)
 
         # update status
-        strfps = " (%.1ffps)" % self.fps
-        self.statusbar.setText(self.status + strfps)
+        self.statusbar.setText(self.status + self.grabdesc)
 
 
 def launch_menu():
